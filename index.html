@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>URL短縮ツール</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root{
+    --bg:#eef2f5; --surface:#ffffff; --fg:#17242f; --muted:#5c7184;
+    --accent:#e4572e; --accent-ink:#ffffff; --line:#c7d2db;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#101a23; --surface:#16222d; --fg:#e8eef3; --muted:#90a3b2;
+      --accent:#ff7a45; --accent-ink:#1a0d06; --line:#2b3d4c;
+    }
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; min-height:100vh; display:flex; align-items:flex-start; justify-content:center;
+    background:var(--bg); color:var(--fg);
+    font-family:'Hiragino Sans','Noto Sans JP',sans-serif;
+    padding:40px 16px;
+  }
+  .card{
+    width:100%; max-width:480px; background:var(--surface);
+    border:1px solid var(--line); border-radius:6px; padding:28px 24px;
+  }
+  h1{font-size:18px; margin:0 0 6px}
+  p.lede{color:var(--muted); font-size:13px; line-height:1.7; margin:0 0 20px}
+  label{display:block; font-size:13px; font-weight:600; margin-bottom:6px}
+  input{
+    width:100%; font-size:14px; padding:10px 12px;
+    border:1px solid var(--line); border-radius:4px;
+    background:var(--bg); color:var(--fg);
+  }
+  input:focus{outline:2px solid var(--accent); outline-offset:1px}
+  .btn{
+    display:inline-flex; align-items:center; justify-content:center;
+    width:100%; margin-top:14px; padding:11px 16px;
+    font-size:14px; font-weight:600; text-decoration:none;
+    background:var(--accent); color:var(--accent-ink);
+    border:none; border-radius:4px; cursor:pointer;
+  }
+  .btn[aria-disabled="true"]{opacity:.45; pointer-events:none}
+  .note{font-size:12px; color:var(--muted); line-height:1.7; margin-top:16px}
+  .btn.outline{background:var(--surface); color:var(--fg); border:1px solid var(--line)}
+  .qr-zone{
+    display:flex; flex-direction:column; align-items:center; gap:10px;
+    margin-top:22px; padding-top:20px; border-top:1px solid var(--line);
+  }
+  .qr-zone canvas, .qr-zone img{
+    border:8px solid #fff; border-radius:2px; box-shadow:0 1px 3px rgba(0,0,0,.15);
+  }
+  .qr-caption{font-size:12px; color:var(--muted); text-align:center; line-height:1.7}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>URL短縮ツール</h1>
+    <p class="lede">長いURLを短縮します。TinyURLの短縮URLは直接リンク先に転送するだけなので、開いたときに広告ページが挟まることはありません。</p>
+
+    <label for="url">短縮したいURL</label>
+    <input id="url" type="text" placeholder="https://example.com/very/long/path">
+
+    <a id="go" class="btn outline" aria-disabled="true" href="#" target="_blank" rel="noopener">短縮URLを作成(文字で貼りたいとき用)</a>
+
+    <p class="note">「短縮URLを作成」を押すと別タブが開き、短縮されたURL(https://tinyurl.com/〜)がそのまま表示されます。コピーしてお使いください。登録・ログインは不要です。</p>
+
+    <div class="qr-zone" id="qrZone" hidden>
+      <div id="qrcode"></div>
+      <p class="qr-caption">このQRコードは入力したURLを<b>直接</b>読み込みます。外部サービスを経由しないため広告は表示されません。画像を右クリック(スマホは長押し)して保存し、資料に貼り付けてください。</p>
+    </div>
+  </div>
+
+<script>
+  var input = document.getElementById('url');
+  var go = document.getElementById('go');
+  var qrZone = document.getElementById('qrZone');
+  var qrHost = document.getElementById('qrcode');
+
+  function update(){
+    var v = input.value.trim();
+    var valid = /^https?:\/\//i.test(v);
+
+    go.setAttribute('aria-disabled', valid ? 'false' : 'true');
+    go.href = valid
+      ? 'https://tinyurl.com/api-create.php?url=' + encodeURIComponent(v)
+      : '#';
+
+    if(valid){
+      qrZone.hidden = false;
+      qrHost.innerHTML = '';
+      new QRCode(qrHost, {
+        text: v,
+        width: 220,
+        height: 220,
+        correctLevel: QRCode.CorrectLevel.H
+      });
+    } else {
+      qrZone.hidden = true;
+      qrHost.innerHTML = '';
+    }
+  }
+  input.addEventListener('input', update);
+  update();
+</script>
+</body>
+</html>
