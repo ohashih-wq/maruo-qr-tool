@@ -3,17 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>URL短縮ツール</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<title>URL短縮・QRコード</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <style>
   :root{
     --bg:#eef2f5; --surface:#ffffff; --fg:#17242f; --muted:#5c7184;
-    --accent:#e4572e; --accent-ink:#ffffff; --line:#c7d2db;
+    --accent:#e4572e; --accent-ink:#ffffff; --line:#c7d2db; --warn:#b3261e;
   }
   @media (prefers-color-scheme: dark){
     :root{
       --bg:#101a23; --surface:#16222d; --fg:#e8eef3; --muted:#90a3b2;
-      --accent:#ff7a45; --accent-ink:#1a0d06; --line:#2b3d4c;
+      --accent:#ff7a45; --accent-ink:#1a0d06; --line:#2b3d4c; --warn:#ff8a80;
     }
   }
   *{box-sizing:border-box}
@@ -43,69 +43,149 @@
     background:var(--accent); color:var(--accent-ink);
     border:none; border-radius:4px; cursor:pointer;
   }
-  .btn[aria-disabled="true"]{opacity:.45; pointer-events:none}
-  .note{font-size:12px; color:var(--muted); line-height:1.7; margin-top:16px}
+  .btn:disabled{opacity:.45; cursor:default}
   .btn.outline{background:var(--surface); color:var(--fg); border:1px solid var(--line)}
-  .qr-zone{
-    display:flex; flex-direction:column; align-items:center; gap:10px;
-    margin-top:22px; padding-top:20px; border-top:1px solid var(--line);
-  }
-  .qr-zone canvas, .qr-zone img{
-    border:8px solid #fff; border-radius:2px; box-shadow:0 1px 3px rgba(0,0,0,.15);
-  }
-  .qr-caption{font-size:12px; color:var(--muted); text-align:center; line-height:1.7}
+  .msg{font-size:13px; line-height:1.7; margin:10px 0 0; color:var(--warn)}
+  .result{margin-top:22px; padding-top:20px; border-top:1px solid var(--line)}
+  .row{display:flex; gap:8px}
+  .row input{flex:1; font-weight:600}
+  .row .btn{width:auto; margin-top:0; white-space:nowrap}
+  .qr-zone{display:flex; flex-direction:column; align-items:center; gap:10px; margin-top:20px}
+  .qr-zone canvas{border-radius:2px; box-shadow:0 1px 3px rgba(0,0,0,.15)}
+  .note{font-size:12px; color:var(--muted); line-height:1.7; margin:8px 0 0}
   [hidden]{display:none!important}
 </style>
 </head>
 <body>
   <div class="card">
-    <h1>URL短縮ツール</h1>
-    <p class="lede">長いURLを短縮します。TinyURLの短縮URLは直接リンク先に転送するだけなので、開いたときに広告ページが挟まることはありません。</p>
+    <h1>URL短縮・QRコード</h1>
+    <p class="lede">URLを入れて「作成する」を押すと、短いURLとQRコードを同じ画面に出します。QRコードは<b>ほかのサイトで作らず</b>、この画面のものを使ってください。</p>
 
-    <label for="url">短縮したいURL</label>
-    <input id="url" type="text" placeholder="https://example.com/very/long/path">
+    <label for="url">元のURL(お客様に見せたいページ)</label>
+    <input id="url" type="text" inputmode="url" placeholder="https://www.maruo1.com/event/〜">
+    <button id="make" class="btn" type="button" disabled>作成する</button>
+    <p id="msg" class="msg" hidden></p>
 
-    <a id="go" class="btn outline" aria-disabled="true" href="#" target="_blank" rel="noopener">短縮URLを作成(文字で貼りたいとき用)</a>
+    <div id="result" class="result" hidden>
+      <label for="short">短いURL(文字で貼るとき用)</label>
+      <div class="row">
+        <input id="short" type="text" readonly>
+        <button id="copy" class="btn outline" type="button">コピー</button>
+      </div>
+      <p class="note">is.gd の短縮URLです。広告をはさまず、そのまま元のページへ移ります。</p>
 
-    <p class="note">「短縮URLを作成」を押すと別タブが開き、短縮されたURL(https://tinyurl.com/〜)がそのまま表示されます。コピーしてお使いください。登録・ログインは不要です。</p>
-
-    <div class="qr-zone" id="qrZone" hidden>
-      <div id="qrcode"></div>
-      <p class="qr-caption">このQRコードは入力したURLを<b>直接</b>読み込みます。外部サービスを経由しないため広告は表示されません。画像を右クリック(スマホは長押し)して保存し、資料に貼り付けてください。</p>
+      <div class="qr-zone">
+        <div id="qrcode"></div>
+        <button id="save" class="btn outline" type="button">QRコードを保存</button>
+        <p class="note">このQRコードには元のURLがそのまま入っています。短縮サービスを通らないので、読んだときに広告は出ません。印刷は2cm角以上にしてください。</p>
+      </div>
     </div>
   </div>
 
 <script>
   var input = document.getElementById('url');
-  var go = document.getElementById('go');
-  var qrZone = document.getElementById('qrZone');
+  var make = document.getElementById('make');
+  var msg = document.getElementById('msg');
+  var result = document.getElementById('result');
+  var shortBox = document.getElementById('short');
+  var copyBtn = document.getElementById('copy');
+  var saveBtn = document.getElementById('save');
   var qrHost = document.getElementById('qrcode');
 
-  function update(){
+  // 短縮URLを元のURLにすると、QRも短縮サービスを通って広告が出ることがあるので受け付けない
+  var SHORTENERS = /^(www\.)?(tinyurl\.com|preview\.tinyurl\.com|bit\.ly|is\.gd|v\.gd|t\.co|ow\.ly|buff\.ly|goo\.gl|x\.gd|cutt\.ly|rebrand\.ly|shorturl\.at|t\.ly)$/i;
+
+  function showMsg(text){ msg.textContent = text; msg.hidden = !text; }
+
+  function check(){
     var v = input.value.trim();
-    var valid = /^https?:\/\//i.test(v);
-
-    go.setAttribute('aria-disabled', valid ? 'false' : 'true');
-    go.href = valid
-      ? 'https://tinyurl.com/api-create.php?url=' + encodeURIComponent(v)
-      : '#';
-
-    if(valid){
-      qrZone.hidden = false;
-      qrHost.innerHTML = '';
-      new QRCode(qrHost, {
-        text: v,
-        width: 220,
-        height: 220,
-        correctLevel: QRCode.CorrectLevel.H
-      });
+    var host = '';
+    try { host = new URL(v).hostname; } catch(e) {}
+    var ok = /^https?:\/\//i.test(v) && host !== '';
+    // 日本語の入ったURLは %xx の形にそろえる(読み取るスマホによって文字化けしないように)
+    if(ok) v = new URL(v).href;
+    if(ok && SHORTENERS.test(host)){
+      showMsg('短縮済みのURL(' + host + ')が入っています。短縮する前の元のURLを入れてください。');
+      ok = false;
     } else {
-      qrZone.hidden = true;
-      qrHost.innerHTML = '';
+      showMsg('');
     }
+    return ok ? v : null;
   }
-  input.addEventListener('input', update);
-  update();
+
+  // 1マスを整数の画素で描き、周りに4マスの白い余白を付ける(半端な大きさだと読めないQRになる)
+  function drawQR(text){
+    var qr = qrcode(0, 'M');
+    qr.addData(text, 'Byte');
+    qr.make();
+    var n = qr.getModuleCount(), quiet = 4;
+    var cell = Math.max(4, Math.floor(280 / (n + quiet * 2)));
+    var c = document.createElement('canvas');
+    c.width = c.height = (n + quiet * 2) * cell;
+    var g = c.getContext('2d');
+    g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height);
+    g.fillStyle = '#000';
+    for(var r = 0; r < n; r++){
+      for(var k = 0; k < n; k++){
+        if(qr.isDark(r, k)) g.fillRect((k + quiet) * cell, (r + quiet) * cell, cell, cell);
+      }
+    }
+    qrHost.innerHTML = '';
+    qrHost.appendChild(c);
+  }
+
+  input.addEventListener('input', function(){
+    // 入力を変えたら古い結果は消す
+    result.hidden = true;
+    qrHost.innerHTML = '';
+    shortBox.value = '';
+    make.disabled = !check();
+  });
+
+  make.addEventListener('click', function(){
+    var v = check();
+    if(!v) return;
+    make.disabled = true;
+    make.textContent = '作成中…';
+    drawQR(v);
+
+    fetch('https://is.gd/create.php?format=json&url=' + encodeURIComponent(v))
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(d.shorturl){
+          shortBox.value = d.shorturl;
+        } else {
+          shortBox.value = '';
+          showMsg('短いURLを作れませんでした(' + (d.errormessage || '理由不明') + ')。QRコードはそのまま使えます。');
+        }
+      })
+      .catch(function(){
+        shortBox.value = '';
+        showMsg('短いURLを作れませんでした(通信できません)。QRコードはそのまま使えます。');
+      })
+      .then(function(){
+        result.hidden = false;
+        make.disabled = false;
+        make.textContent = '作成する';
+      });
+  });
+
+  copyBtn.addEventListener('click', function(){
+    if(!shortBox.value) return;
+    shortBox.select();
+    var done = function(){ copyBtn.textContent = 'コピーしました'; setTimeout(function(){ copyBtn.textContent = 'コピー'; }, 1500); };
+    if(navigator.clipboard){ navigator.clipboard.writeText(shortBox.value).then(done, function(){ document.execCommand('copy'); done(); }); }
+    else { document.execCommand('copy'); done(); }
+  });
+
+  saveBtn.addEventListener('click', function(){
+    var c = qrHost.querySelector('canvas');
+    if(!c) return;
+    var a = document.createElement('a');
+    a.href = c.toDataURL('image/png');
+    a.download = 'qrcode.png';
+    document.body.appendChild(a); a.click(); a.remove();
+  });
 </script>
 </body>
 </html>
