@@ -70,15 +70,17 @@
     <p id="msg" class="msg" hidden></p>
 
     <div id="result" class="result" hidden>
+      <div id="shortArea">
       <label for="short">短いURL(文字で貼るとき用)</label>
       <div class="row">
         <input id="short" type="text" readonly>
         <button id="copy" class="btn outline" type="button">コピー</button>
       </div>
       <p class="note">is.gd の短縮URLです。広告をはさまず、そのまま元のページへ移ります。</p>
+      </div>
 
       <div class="qr-zone">
-        <div class="choice" role="radiogroup" aria-label="QRに入れるもの">
+        <div id="choice" class="choice" role="radiogroup" aria-label="QRに入れるもの">
           <label><input type="radio" name="qrkind" value="long" checked><span><b>元のURL</b>(目が細かい・長く使える。ふだんはこちら)</span></label>
           <label><input type="radio" name="qrkind" value="short" id="kindShort"><span><b>短いURL</b>(目が粗い・小さく印刷するとき用。is.gd が止まると読めなくなります)</span></label>
         </div>
@@ -239,9 +241,11 @@
         showMsg('短いURLを作れませんでした(通信できません)。QRコードはそのまま使えます。');
       })
       .then(function(){
-        // 短いURLが作れなかったときは「短いURL」を選べないようにする
-        kindShort.disabled = !shortBox.value;
-        if(!shortBox.value) document.querySelector('input[name="qrkind"][value="long"]').checked = true;
+        // 短いURLが作れなかったときは、押せないボタンを見せず選ぶ欄ごと隠す(社員が壊れたと思わないように)
+        var noShort = !shortBox.value;
+        document.getElementById('choice').hidden = noShort;
+        document.getElementById('shortArea').hidden = noShort;
+        if(noShort) document.querySelector('input[name="qrkind"][value="long"]').checked = true;
         showQR();
         result.hidden = false;
         make.disabled = false;
