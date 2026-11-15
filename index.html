@@ -52,6 +52,9 @@
   .row .btn{width:auto; margin-top:0; white-space:nowrap}
   .qr-zone{display:flex; flex-direction:column; align-items:center; gap:10px; margin-top:20px}
   .qr-zone canvas{border-radius:2px; box-shadow:0 1px 3px rgba(0,0,0,.15)}
+  .choice{display:flex; flex-direction:column; gap:6px; width:100%; font-size:13px}
+  .choice label{display:flex; gap:8px; align-items:flex-start; font-weight:400; margin:0; cursor:pointer; line-height:1.6}
+  .choice input{width:auto; margin-top:4px}
   .note{font-size:12px; color:var(--muted); line-height:1.7; margin:8px 0 0}
   [hidden]{display:none!important}
 </style>
@@ -75,9 +78,13 @@
       <p class="note">is.gd の短縮URLです。広告をはさまず、そのまま元のページへ移ります。</p>
 
       <div class="qr-zone">
+        <div class="choice" role="radiogroup" aria-label="QRに入れるもの">
+          <label><input type="radio" name="qrkind" value="long" checked><span><b>元のURL</b>(目が細かい・長く使える。ふだんはこちら)</span></label>
+          <label><input type="radio" name="qrkind" value="short" id="kindShort"><span><b>短いURL</b>(目が粗い・小さく印刷するとき用。is.gd が止まると読めなくなります)</span></label>
+        </div>
         <div id="qrcode"></div>
         <button id="save" class="btn outline" type="button">QRコードを保存</button>
-        <p class="note">このQRコードには元のURLがそのまま入っています。短縮サービスを通らないので、読んだときに広告は出ません。印刷は2cm角以上にしてください。</p>
+        <p id="qrnote" class="note"></p>
         <p class="note">保存すると印刷用の大きな画像(約1200画素)になります。Excel や Word で小さく縮めても、にじまずに読めます。</p>
         <p id="qrtext" class="note" hidden></p>
       </div>
@@ -98,6 +105,26 @@
   var SHORTENERS = /^(www\.)?(tinyurl\.com|preview\.tinyurl\.com|bit\.ly|is\.gd|v\.gd|t\.co|ow\.ly|buff\.ly|goo\.gl|x\.gd|cutt\.ly|rebrand\.ly|shorturl\.at|t\.ly)$/i;
 
   var qrText = document.getElementById('qrtext');
+  var qrNote = document.getElementById('qrnote');
+  var kindShort = document.getElementById('kindShort');
+  var longText = '', longNote = '';
+  var NOTE_LONG = 'このQRコードには元のURLがそのまま入っています。短縮サービスを通らないので、読んだときに広告は出ません。印刷は2cm角以上にしてください。';
+  var NOTE_SHORT = 'このQRコードには短いURL(is.gd)が入っています。目が粗く小さく印刷しても読みやすい代わりに、is.gd が止まったり広告を入れたりすると読めなくなります。長く配る紙には「元のURL」をおすすめします。';
+
+  function kind(){ return document.querySelector('input[name="qrkind"]:checked').value; }
+  // 選んだほうのQRを画面に出す
+  function showQR(){
+    var useShort = kind() === 'short' && shortBox.value;
+    var t = useShort ? shortBox.value : longText;
+    if(!t) return;
+    qrHost.innerHTML = '';
+    qrHost.appendChild(drawQR(t, 280));
+    qrHost.dataset.text = t;
+    qrNote.textContent = useShort ? NOTE_SHORT : NOTE_LONG;
+    qrText.textContent = useShort ? 'QRに入れたURL: ' + t : longNote;
+    qrText.hidden = false;
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('input[name="qrkind"]'), function(r){ r.addEventListener('change', showQR); });
 
   // 行き先が変わらない飾りの部分(広告の計測用など)を外して、QRの目を粗く・読みやすくする
   var TRACK = /^(utm_[a-z]+|fbclid|gclid|gbraid|wbraid|yclid|msclkid|igsh|igshid|mc_cid|mc_eid|_ga|_gl)$/i;
@@ -166,6 +193,8 @@
     qrHost.innerHTML = '';
     qrHost.dataset.text = '';
     qrText.hidden = true;
+    // 新しいURLでは毎回「元のURL」から始める(長く使えるほうを基本に)
+    document.querySelector('input[name="qrkind"][value="long"]').checked = true;
     shortBox.value = '';
     make.disabled = !check();
   });
@@ -175,12 +204,9 @@
     if(!v) return;
     make.disabled = true;
     make.textContent = '作成中…';
-    qrHost.innerHTML = '';
-    qrHost.appendChild(drawQR(v, 280));
-    qrHost.dataset.text = v;
+    longText = v;
     var raw = new URL(input.value.trim()).href;
-    qrText.textContent = 'QRに入れたURL: ' + v + (raw !== v ? '(広告の計測用などの飾りを外して短くしました。行き先は同じです)' : '');
-    qrText.hidden = false;
+    longNote = 'QRに入れたURL: ' + v + (raw !== v ? '(広告の計測用などの飾りを外して短くしました。行き先は同じです)' : '');
 
     fetch('https://is.gd/create.php?format=json&url=' + encodeURIComponent(v))
       .then(function(r){ return r.json(); })
@@ -197,6 +223,10 @@
         showMsg('短いURLを作れませんでした(通信できません)。QRコードはそのまま使えます。');
       })
       .then(function(){
+        // 短いURLが作れなかったときは「短いURL」を選べないようにする
+        kindShort.disabled = !shortBox.value;
+        if(!shortBox.value) document.querySelector('input[name="qrkind"][value="long"]').checked = true;
+        showQR();
         result.hidden = false;
         make.disabled = false;
         make.textContent = '作成する';
