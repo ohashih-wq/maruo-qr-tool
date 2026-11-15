@@ -78,6 +78,8 @@
         <div id="qrcode"></div>
         <button id="save" class="btn outline" type="button">QRコードを保存</button>
         <p class="note">このQRコードには元のURLがそのまま入っています。短縮サービスを通らないので、読んだときに広告は出ません。印刷は2cm角以上にしてください。</p>
+        <p class="note">保存すると印刷用の大きな画像(約1200画素)になります。Excel や Word で小さく縮めても、にじまずに読めます。</p>
+        <p id="qrtext" class="note" hidden></p>
       </div>
     </div>
   </div>
@@ -95,6 +97,30 @@
   // 短縮URLを元のURLにすると、QRも短縮サービスを通って広告が出ることがあるので受け付けない
   var SHORTENERS = /^(www\.)?(tinyurl\.com|preview\.tinyurl\.com|bit\.ly|is\.gd|v\.gd|t\.co|ow\.ly|buff\.ly|goo\.gl|x\.gd|cutt\.ly|rebrand\.ly|shorturl\.at|t\.ly)$/i;
 
+  var qrText = document.getElementById('qrtext');
+
+  // 行き先が変わらない飾りの部分(広告の計測用など)を外して、QRの目を粗く・読みやすくする
+  var TRACK = /^(utm_[a-z]+|fbclid|gclid|gbraid|wbraid|yclid|msclkid|igsh|igshid|mc_cid|mc_eid|_ga|_gl)$/i;
+  function tidy(href){
+    var u = new URL(href);
+    var host = u.hostname.replace(/^(www\.|m\.)/i, '').toLowerCase();
+    var isYT = host === 'youtube.com' || host === 'youtu.be';
+    var keys = [];
+    u.searchParams.forEach(function(_, k){ keys.push(k); });
+    keys.forEach(function(k){
+      if(TRACK.test(k) || (isYT && (k === 'si' || k === 'feature' || k === 'pp'))) u.searchParams.delete(k);
+    });
+    // YouTube の動画は同じ動画へ行く短い形 youtu.be/動画ID にそろえる(再生位置 t は残す)
+    if(host === 'youtube.com' && u.pathname === '/watch' && u.searchParams.get('v')){
+      var id = u.searchParams.get('v'); u.searchParams.delete('v');
+      var rest = u.searchParams.toString();
+      return 'https://youtu.be/' + id + (rest ? '?' + rest : '') + u.hash;
+    }
+    var out = u.href;
+    if(out.indexOf('?') >= 0 && !u.search) out = out.replace('?', '');
+    return out;
+  }
+
   function showMsg(text){ msg.textContent = text; msg.hidden = !text; }
 
   function check(){
@@ -110,16 +136,17 @@
     } else {
       showMsg('');
     }
-    return ok ? v : null;
+    return ok ? tidy(v) : null;
   }
 
   // 1マスを整数の画素で描き、周りに4マスの白い余白を付ける(半端な大きさだと読めないQRになる)
-  function drawQR(text){
+  // size は画像の大きさの目安(画面は280、保存は1200)
+  function drawQR(text, size){
     var qr = qrcode(0, 'M');
     qr.addData(text, 'Byte');
     qr.make();
     var n = qr.getModuleCount(), quiet = 4;
-    var cell = Math.max(4, Math.floor(280 / (n + quiet * 2)));
+    var cell = Math.max(4, Math.floor(size / (n + quiet * 2)));
     var c = document.createElement('canvas');
     c.width = c.height = (n + quiet * 2) * cell;
     var g = c.getContext('2d');
@@ -130,14 +157,15 @@
         if(qr.isDark(r, k)) g.fillRect((k + quiet) * cell, (r + quiet) * cell, cell, cell);
       }
     }
-    qrHost.innerHTML = '';
-    qrHost.appendChild(c);
+    return c;
   }
 
   input.addEventListener('input', function(){
     // 入力を変えたら古い結果は消す
     result.hidden = true;
     qrHost.innerHTML = '';
+    qrHost.dataset.text = '';
+    qrText.hidden = true;
     shortBox.value = '';
     make.disabled = !check();
   });
@@ -147,7 +175,12 @@
     if(!v) return;
     make.disabled = true;
     make.textContent = '作成中…';
-    drawQR(v);
+    qrHost.innerHTML = '';
+    qrHost.appendChild(drawQR(v, 280));
+    qrHost.dataset.text = v;
+    var raw = new URL(input.value.trim()).href;
+    qrText.textContent = 'QRに入れたURL: ' + v + (raw !== v ? '(広告の計測用などの飾りを外して短くしました。行き先は同じです)' : '');
+    qrText.hidden = false;
 
     fetch('https://is.gd/create.php?format=json&url=' + encodeURIComponent(v))
       .then(function(r){ return r.json(); })
@@ -179,8 +212,9 @@
   });
 
   saveBtn.addEventListener('click', function(){
-    var c = qrHost.querySelector('canvas');
-    if(!c) return;
+    var t = qrHost.dataset.text;
+    if(!t) return;
+    var c = drawQR(t, 1200);
     var a = document.createElement('a');
     a.href = c.toDataURL('image/png');
     a.download = 'qrcode.png';
