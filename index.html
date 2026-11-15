@@ -76,13 +76,13 @@
         <input id="short" type="text" readonly>
         <button id="copy" class="btn outline" type="button">コピー</button>
       </div>
-      <p class="note">is.gd の短縮URLです。広告をはさまず、そのまま元のページへ移ります。</p>
+      <p id="shortNote" class="note">is.gd の短縮URLです。広告をはさまず、そのまま元のページへ移ります。</p>
       </div>
 
       <div class="qr-zone">
         <div id="choice" class="choice" role="radiogroup" aria-label="QRに入れるもの">
           <label><input type="radio" name="qrkind" value="long" checked><span><b>元のURL</b>(目が細かい・長く使える。ふだんはこちら)</span></label>
-          <label><input type="radio" name="qrkind" value="short" id="kindShort"><span><b>短いURL</b>(目が粗い・小さく印刷するとき用。is.gd が止まると読めなくなります)</span></label>
+          <label><input type="radio" name="qrkind" value="short" id="kindShort"><span><b>短いURL</b>(目が粗い・小さく印刷するとき用。<span id="shortBy">is.gd</span> が止まると読めなくなります)</span></label>
         </div>
         <div id="qrcode"></div>
         <button id="save" class="btn outline" type="button">QRコードを保存</button>
@@ -109,7 +109,7 @@
   var qrText = document.getElementById('qrtext');
   var qrNote = document.getElementById('qrnote');
   var kindShort = document.getElementById('kindShort');
-  var longText = '', longNote = '';
+  var longText = '', longNote = '', shortBy = 'is.gd';
   var NOTE_LONG = 'このQRコードには元のURLがそのまま入っています。短縮サービスを通らないので、読んだときに広告は出ません。印刷は2cm角以上にしてください。';
   var NOTE_SHORT = 'このQRコードには短いURL(is.gd)が入っています。目が粗く小さく印刷しても読みやすい代わりに、is.gd が止まったり広告を入れたりすると読めなくなります。長く配る紙には「元のURL」をおすすめします。';
 
@@ -122,7 +122,7 @@
     qrHost.innerHTML = '';
     qrHost.appendChild(drawQR(t, 280));
     qrHost.dataset.text = t;
-    qrNote.textContent = useShort ? NOTE_SHORT : NOTE_LONG;
+    qrNote.textContent = useShort ? NOTE_SHORT.replace(/is\.gd/g, shortBy) : NOTE_LONG;
     qrText.textContent = useShort ? 'QRに入れたURL: ' + t : longNote;
     qrText.hidden = false;
   }
@@ -221,15 +221,16 @@
 
     // is.gd が英語の確認画面(Shortened link)をはさむサイトは短縮しない(11/15 試して確認: Dropbox・Googleフォーム・OneDrive)
     var site = previewSite(v);
+    // その3つは spoo.me で短くする(11/15 3者で検討・大橋さん決定。ブラウザで確認画面なしの直接転送を確認)
+    shortBy = site ? 'spoo.me' : 'is.gd';
     var job = site
-      ? Promise.resolve({ errormessage: null, preview: site })
+      ? fetch('https://spoo.me/', { method: 'POST', headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'url=' + encodeURIComponent(v) })
+          .then(function(r){ return r.json(); })
+          .then(function(d){ return d.short_url ? { shorturl: d.short_url.replace(/^http:/, 'https:') } : { errormessage: d.error || d.message || null }; })
       : fetch('https://is.gd/create.php?format=json&url=' + encodeURIComponent(v)).then(function(r){ return r.json(); });
     job
       .then(function(d){
-        if(d.preview){
-          shortBox.value = '';
-          showMsg(d.preview + 'のリンクは、短くすると開いたときに英語の確認画面が出てしまうため、短いURLは作りません。QRコード(元のURL)はそのまま使えます。文字で貼るときも元のURLを貼ってください。' + (d.preview === 'Googleフォーム' ? '短くしたいときは、フォームの「送信」→リンクの印→「URLを短縮」で出る forms.gle のURLを使えます。' : ''));
-        } else if(d.shorturl){
+        if(d.shorturl){
           shortBox.value = d.shorturl;
         } else {
           shortBox.value = '';
@@ -245,6 +246,8 @@
         var noShort = !shortBox.value;
         document.getElementById('choice').hidden = noShort;
         document.getElementById('shortArea').hidden = noShort;
+        document.getElementById('shortBy').textContent = shortBy;
+        document.getElementById('shortNote').textContent = shortBy + ' の短縮URLです。広告や確認画面をはさまず、そのまま元のページへ移ります。';
         if(noShort) document.querySelector('input[name="qrkind"][value="long"]').checked = true;
         showQR();
         result.hidden = false;
