@@ -148,6 +148,15 @@
     return out;
   }
 
+  // is.gd が確認画面をはさむサイト(見つけたら足す)
+  function previewSite(href){
+    var u = new URL(href), h = u.hostname.toLowerCase();
+    if(/(^|\.)(dropbox\.com|dropboxusercontent\.com|db\.tt)$/.test(h)) return 'Dropbox';
+    if(h === 'docs.google.com' && /^\/forms\//.test(u.pathname)) return 'Googleフォーム';
+    if(/(^|\.)(1drv\.ms|onedrive\.live\.com|sharepoint\.com)$/.test(h)) return 'OneDrive';
+    return '';
+  }
+
   function showMsg(text){ msg.textContent = text; msg.hidden = !text; }
 
   function check(){
@@ -208,10 +217,17 @@
     var raw = new URL(input.value.trim()).href;
     longNote = 'QRに入れたURL: ' + v + (raw !== v ? '(広告の計測用などの飾りを外して短くしました。行き先は同じです)' : '');
 
-    fetch('https://is.gd/create.php?format=json&url=' + encodeURIComponent(v))
-      .then(function(r){ return r.json(); })
+    // is.gd が英語の確認画面(Shortened link)をはさむサイトは短縮しない(11/15 試して確認: Dropbox・Googleフォーム・OneDrive)
+    var site = previewSite(v);
+    var job = site
+      ? Promise.resolve({ errormessage: null, preview: site })
+      : fetch('https://is.gd/create.php?format=json&url=' + encodeURIComponent(v)).then(function(r){ return r.json(); });
+    job
       .then(function(d){
-        if(d.shorturl){
+        if(d.preview){
+          shortBox.value = '';
+          showMsg(d.preview + 'のリンクは、短くすると開いたときに英語の確認画面が出てしまうため、短いURLは作りません。QRコード(元のURL)はそのまま使えます。文字で貼るときも元のURLを貼ってください。' + (d.preview === 'Googleフォーム' ? '短くしたいときは、フォームの「送信」→リンクの印→「URLを短縮」で出る forms.gle のURLを使えます。' : ''));
+        } else if(d.shorturl){
           shortBox.value = d.shorturl;
         } else {
           shortBox.value = '';
